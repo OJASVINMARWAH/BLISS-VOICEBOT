@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro CRT Robot Avatar - Premium Silver Edition</title>
+    <!-- Three.js & GSAP Engines -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Premium Digital Segment & CRT Monospace Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=VT323&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: transparent; /* Seamless transparent layer for embedding */
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- CORE SYSTEM VARIABLES ---
+        let scene, camera, renderer, clock;
+        let robotGroup, headGroup, bodyGroup, antennaLed;
+        let leftArm, rightArm; // Nested structures for arm animation
+        let projectorBase, projectionBeam, projectorLensCore, laserLines = [];
+        let holoRingInner, holoRingOuter;
+        let noiseTexture;
+        
+        let state = 'idle';
+        let audioAmplitude = 0;
+        let targetAmplitude = 0;
+        let time = 0;
+
+        // Arm and gesture controller variables
+        let isWaving = false;
+        let activeGesture = null; // Overrides arm sways: 'thumbsup', 'shrug', 'wave', 'thinking'
+        let faceOverride = null;  // Overrides standard display: 'correct', 'incorrect', 'thinking'
+        let nextWaveTime = 8; // Friendly greeting wave schedule timer
+        let nextThinkTime = 14; // Thought cycle schedule timer
+
+        // Informative speech gesture variables
+        let speakGestureType = 0;
+        let nextGestureTime = 0;
+
+        // Expression states
+        let faceState = { blink: 1, happy: 0 };
+
+        // Dynamic Canvas for the CRT Display
+        let faceCanvas, faceCtx, faceTexture;
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            clock = new THREE.Clock();
+
+            // 1. Scene Setup
+            scene = new THREE.Scene();
+
+            // 2. Camera Setup
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 1.2, 9);
+
+            // 3. Renderer Setup with Alpha (transparency) enabled
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.35;
+            container.appendChild(renderer.domElement);
+
+            createProceduralNoiseTexture();
+            createLighting();
+            createDynamicFaceTexture();
+            createRobot();
+            createHolographicProjector();
+
+            window.addEventListener('resize', onWindowResize);
+            setupMouseTracking();
+
+            animate();
+        }
+
+        // --- PROCEDURAL BRUSHED METAL NOISE MAP ---
+        function createProceduralNoiseTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            // Build fine micro-grain noise to act as a high-end brushed/matte bump map
+            for (let x = 0; x < canvas.width; x++) {
+                for (let y = 0; y < canvas.height; y++) {
+                    const val = Math.floor(Math.random() * 20);
+                    ctx.fillStyle = `rgb(${140 + val}, ${140 + val}, ${140 + val})`;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            
+            noiseTexture = new THREE.CanvasTexture(canvas);
+            noiseTexture.wrapS = THREE.RepeatWrapping;
+            noiseTexture.wrapT = THREE.RepeatWrapping;
+            noiseTexture.repeat.set(3, 3);
+        }
+
+        // --- PREMIUM LIGHTING SETUP ---
+        function createLighting() {
+            // Ambient to soft-fill dark spots with a cyber amethyst/green mix
+            const ambient = new THREE.AmbientLight(0x180a1c, 0.75);
+            scene.add(ambient);
+
+            // Main sharp keylight to catch premium metallic grey & chrome bevels
+            const mainLight = new THREE.DirectionalLight(0xffffff, 2.8);
+            mainLight.position.set(5, 8, 4);
+            scene.add(mainLight);
+
+            // Backlighting/Rim light to make the silhouette pop beautifully
+            const rimLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            rimLight.position.set(-5, 6, -4);
+            scene.add(rimLight);
+
+            // Phosphor green under-glow matching the projector emission
+            const holoLight = new THREE.PointLight(0x52ff7a, 4.0, 10);
+            holoLight.position.set(0, -2, 1);
+            scene.add(holoLight);
+
+            // Soft cyan rim light from the left
+            const fillLight = new THREE.DirectionalLight(0x00E5FF, 1.5);
+            fillLight.position.set(-5, 2, -2);
+            scene.add(fillLight);
+        }
+
+        // Helper function for round rect screen pixel blocks
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.fill();
+        }
+
+        // --- CATHODE RAY TUBE (CRT) FACE TEXTURE GENERATOR ---
+        function createDynamicFaceTexture() {
+            faceCanvas = document.createElement('canvas');
+            faceCanvas.width = 512;
+            faceCanvas.height = 256;
+            faceCtx = faceCanvas.getContext('2d');
+            
+            faceTexture = new THREE.CanvasTexture(faceCanvas);
+            faceTexture.minFilter = THREE.LinearMipmapLinearFilter;
+            faceTexture.magFilter = THREE.LinearFilter;
+            faceTexture.generateMipmaps = true;
+
+            // Apply high anisotropic filtering for supreme sharpness in 3D space
+            const maxAnisotropy = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+            faceTexture.anisotropy = maxAnisotropy;
+
+            updateFace(0);
+        }
+
+        function updateFace(amplitude) {
+            // 1. Darker, plum/purple back panel
+            faceCtx.fillStyle = '#20031a';
+            faceCtx.fillRect(0, 0, 512, 256);
+
+            // CRT Scanlines and horizontal pixel grids (amethyst overlay)
+            faceCtx.fillStyle = '#140110';
+            for(let i=0; i<512; i+=4) faceCtx.fillRect(i, 0, 1, 256); // Vertical mask stripes
+            for(let i=0; i<256; i+=6) faceCtx.fillRect(0, i, 512, 2); // Horizontal scanlines
+
+            // 2. Glowing light maroon/purple phosphor vector elements
+            faceCtx.fillStyle = '#ff52e0';
+            faceCtx.strokeStyle = '#ff52e0';
+            faceCtx.shadowColor = '#ff52e0';
+            faceCtx.shadowBlur = 18;
+
+            if (faceOverride === 'correct') {
+                // Correct Mode - Beautiful glowing happy vector eyes
+                faceCtx.textAlign = 'center';
+                faceCtx.font = 'bold 24px "VT323", monospace';
+                faceCtx.fillText('[DIAGNOSTIC_PASS]', 256, 50);
+
+                // Cheerful squint eyes (^ ^)
+                faceCtx.beginPath();
+                faceCtx.moveTo(130, 125);
+                faceCtx.quadraticCurveTo(150, 85, 170, 125);
+                faceCtx.moveTo(342, 125);
+                faceCtx.quadraticCurveTo(362, 85, 382, 125);
+                faceCtx.lineWidth = 14;
+                faceCtx.stroke();
+
+                // Happy open curved mouth
+                faceCtx.beginPath();
+                faceCtx.moveTo(196, 170);
+                faceCtx.quadraticCurveTo(256, 215, 316, 170);
+                faceCtx.lineWidth = 8;
+                faceCtx.stroke();
+
+            } else if (faceOverride === 'incorrect') {
+                // Sarcastic Mode - Disappointed expressions
+                faceCtx.textAlign = 'center';
+                faceCtx.font = 'bold 24px "VT323", monospace';
+                faceCtx.fillText('[DIAGNOSTIC_WARN]', 256, 50);
+
+                // Narrow, dry straight flat horizontal eyes (- -)
+                faceCtx.lineWidth = 10;
+                faceCtx.beginPath();
+                faceCtx.moveTo(120, 110);
+                faceCtx.lineTo(180, 110);
+                faceCtx.moveTo(332, 110);
+                faceCtx.lineTo(392, 110);
+                faceCtx.stroke();
+
+                // Straight flat mouth line
+                faceCtx.beginPath();
+                faceCtx.moveTo(196, 180);
+                faceCtx.lineTo(316, 180);
+                faceCtx.lineWidth = 6;
+                faceCtx.stroke();
+
+            } else if (faceOverride === 'thinking') {
+                // --- DEEP THINKING EXPRESSION ---
+                faceCtx.textAlign = 'center';
+                faceCtx.font = 'bold 24px "VT323", monospace';
+                faceCtx.fillText('[THOUGHT_PROCESS_ACTIVE]', 256, 50);
+
+                // Eyes shifted upwards and sideways to look contemplative
+                const eyeHeight = 35;
+                const leftEyeX = 135;
+                const rightEyeX = 367;
+                const eyeYShifted = 80;
+
+                // Tilted, wondering eyes (one slightly quizzically raised)
+                roundRect(faceCtx, leftEyeX, eyeYShifted, 40, eyeHeight - 5, 8);
+                roundRect(faceCtx, rightEyeX, eyeYShifted - 6, 40, eyeHeight, 8);
+
+                // Curious squiggly thinking mouth
+                const mouthY = 175;
+                faceCtx.beginPath();
+                faceCtx.moveTo(196, mouthY);
+                faceCtx.bezierCurveTo(
+                    226, mouthY - 12 + Math.sin(time * 6) * 4,
+                    286, mouthY + 12 + Math.sin(time * 6) * 4,
+                    316, mouthY
+                );
+                faceCtx.lineWidth = 6;
+                faceCtx.stroke();
+
+            } else {
+                // --- NORMAL EMOTIVE FACE STATE ---
+
+                // Persistent Minimal Embedded Top Label with digital segment styling
+                faceCtx.shadowBlur = 8;
+                faceCtx.font = '900 13px "Orbitron", sans-serif';
+                
+                // Fainted unlit background segment indicators
+                faceCtx.fillStyle = 'rgba(255, 82, 224, 0.08)'; 
+                faceCtx.fillText('888_88: 888888 8888-88', 120, 28);
+                faceCtx.fillText('888888: 888888_8888', 390, 28);
+
+                // Active text glow layer
+                faceCtx.fillStyle = '#ff52e0';
+                faceCtx.shadowColor = '#ff52e0';
+                faceCtx.shadowBlur = 10;
+                faceCtx.fillText('UNIT_OS: V2.10_STABLE', 120, 28);
+                faceCtx.fillText('METRIC: ACTIVE_STBY', 390, 28);
+
+                // Active text sharp core
+                faceCtx.shadowBlur = 0;
+                faceCtx.fillStyle = '#ffeefa';
+                faceCtx.fillText('UNIT_OS: V2.10_STABLE', 120, 28);
+                faceCtx.fillText('METRIC: ACTIVE_STBY', 390, 28);
+
+                // Reset letterSpacing to default for eye drawing
+                faceCtx.letterSpacing = "normal";
+
+                // Render Blinking & Happy Eyes
+                const eyeH = 35 * faceState.blink;
+                const eyeY = 85 + (35 - eyeH) / 2;
+                
+                if (faceState.happy > 0.5 && faceState.blink > 0.5) {
+                    // Happy curved vector segment eyes (^ ^)
+                    faceCtx.beginPath();
+                    faceCtx.moveTo(120, 110);
+                    faceCtx.quadraticCurveTo(140, 70, 160, 110);
+                    faceCtx.moveTo(352, 110);
+                    faceCtx.quadraticCurveTo(372, 70, 392, 110);
+                    faceCtx.lineWidth = 12;
+                    faceCtx.shadowBlur = 15;
+                    faceCtx.shadowColor = '#ff52e0';
+                    faceCtx.stroke();
+                } else {
+                    // Classic rounded CRT monitor pixel-block eyes (Glow Layer)
+                    faceCtx.shadowBlur = 15;
+                    faceCtx.shadowColor = '#ff52e0';
+                    faceCtx.fillStyle = '#ff52e0';
+                    roundRect(faceCtx, 120, eyeY, 40, Math.max(eyeH, 4), 8);
+                    roundRect(faceCtx, 352, eyeY, 40, Math.max(eyeH, 4), 8);
+
+                    // Sharp overlay core
+                    faceCtx.shadowBlur = 0;
+                    faceCtx.fillStyle = '#ffeefa';
+                    roundRect(faceCtx, 120, eyeY, 40, Math.max(eyeH, 4), 8);
+                    roundRect(faceCtx, 352, eyeY, 40, Math.max(eyeH, 4), 8);
+                }
+
+                // --- HIGHLY EXPRESSIVE PHONETIC MOUTH SYSTEM ---
+                const mouthY = 168;
+                const mouthSpeed = 24;
+                const phoneticWarp = Math.sin(time * mouthSpeed);
+                const mouthWidth = 100 + (amplitude * 70) + (phoneticWarp * 18 * amplitude);
+                const mouthHeight = (amplitude * 60) + 6; // Dynamically computed vertical spread
+
+                faceCtx.beginPath();
+                // Complex organic Bezier curves for a premium rounded-lip look
+                faceCtx.moveTo(256 - mouthWidth / 2, mouthY);
+                // Top Lip Arc
+                faceCtx.bezierCurveTo(
+                    256 - mouthWidth / 4, mouthY - mouthHeight / 3,
+                    256 + mouthWidth / 4, mouthY - mouthHeight / 3,
+                    256 + mouthWidth / 2, mouthY
+                );
+                // Bottom Lip Arc
+                faceCtx.bezierCurveTo(
+                    256 + mouthWidth / 4, mouthY + mouthHeight * 1.25,
+                    256 - mouthWidth / 4, mouthY + mouthHeight * 1.25,
+                    256 - mouthWidth / 2, mouthY
+                );
+
+                faceCtx.fillStyle = '#ff52e0';
+                faceCtx.shadowBlur = 15;
+                faceCtx.shadowColor = '#ff52e0';
+                faceCtx.fill();
+                faceCtx.lineWidth = 8;
+                faceCtx.stroke();
+
+                // Dynamic Soundwave Spectrum overlay inside the active mouth contour
+                faceCtx.shadowBlur = 0;
+                faceCtx.strokeStyle = '#ffeefa';
+                faceCtx.lineWidth = 4;
+                faceCtx.beginPath();
+                
+                if (amplitude > 0.05) {
+                    const totalBars = 6;
+                    const spacing = mouthWidth / (totalBars + 1);
+                    for (let i = 1; i <= totalBars; i++) {
+                        const barX = (256 - mouthWidth / 2) + i * spacing;
+                        // Organic high-frequency jitter on the sound bars
+                        const barHeight = (mouthHeight * 0.75) * (0.55 + Math.sin(time * 35 + i) * 0.45);
+                        faceCtx.moveTo(barX, mouthY - barHeight / 2);
+                        faceCtx.lineTo(barX, mouthY + barHeight / 2);
+                    }
+                    faceCtx.stroke();
+                } else {
+                    // Closed standby slit
+                    faceCtx.beginPath();
+                    faceCtx.moveTo(256 - mouthWidth / 2 + 12, mouthY);
+                    faceCtx.lineTo(256 + mouthWidth / 2 - 12, mouthY);
+                    faceCtx.stroke();
+                }
+            }
+
+            faceCtx.shadowBlur = 0; 
+            faceTexture.needsUpdate = true;
+        }
+
+        // --- PREMIUM 3D MODEL CONSTRUCTION ---
+        function createRobot() {
+            robotGroup = new THREE.Group();
+            robotGroup.position.y = 0.5;
+
+            // Premium bright silver-grey industrial anodized shell with dynamic bump maps
+            const shellMat = new THREE.MeshStandardMaterial({
+                color: 0xd1d5db,  // Light premium grey
+                metalness: 0.95,  // High-end metallic finish
+                roughness: 0.18,  // Soft shiny highlights
+                bumpMap: noiseTexture,
+                bumpScale: 0.003,
+                roughnessMap: noiseTexture,
+                envMapIntensity: 1.5
+            });
+
+            // Dark space-charcoal details & joint bellows
+            const darkMat = new THREE.MeshStandardMaterial({
+                color: 0x1f2937,  // Polished Dark Grey / Space Charcoal
+                metalness: 0.85,
+                roughness: 0.45
+            });
+
+            // CRT display screen with neon emissions (magenta-purple matching faceTexture)
+            const screenMat = new THREE.MeshStandardMaterial({
+                map: faceTexture,
+                emissive: 0xaa0099,
+                emissiveMap: faceTexture,
+                emissiveIntensity: 2.0,
+                roughness: 0.1,
+                metalness: 0.1
+            });
+
+            // 1. Floating Holographic Rings
+            const ringGeo = new THREE.RingGeometry(1.6, 1.7, 64);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0x52ff7a, side: THREE.DoubleSide, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending
+            });
+            holoRingOuter = new THREE.Mesh(ringGeo, ringMat);
+            holoRingOuter.rotation.x = Math.PI / 2;
+            holoRingOuter.position.y = -2.2;
+            robotGroup.add(holoRingOuter);
+
+            holoRingInner = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.4, 64), ringMat);
+            holoRingInner.rotation.x = Math.PI / 2;
+            holoRingInner.position.y = -2.2;
+            holoRingInner.material.opacity = 0.3;
+            robotGroup.add(holoRingInner);
+
+            // Energy connecting beams
+            const beamGeo = new THREE.CylinderGeometry(0.8, 1.2, 1.0, 32, 1, true);
+            const beamMat = new THREE.MeshBasicMaterial({color: 0x52ff7a, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, side: THREE.DoubleSide});
+            const beam = new THREE.Mesh(beamGeo, beamMat);
+            beam.position.y = -1.7;
+            robotGroup.add(beam);
+
+            // 2. Base Body Cylinder with Panel Bevel Details
+            bodyGroup = new THREE.Group();
+            bodyGroup.position.y = -0.8;
+
+            const bodyBase = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.2, 0.4, 32), shellMat);
+            bodyBase.position.y = -0.5;
+            bodyGroup.add(bodyBase);
+
+            const bodyMid = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 0.7, 32), shellMat);
+            bodyMid.position.y = 0.05;
+            bodyGroup.add(bodyMid);
+
+            // Detailed chest control panel plate (Dark Charcoal)
+            const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.4), darkMat);
+            panel.position.set(0, 0.05, 1.41);
+            bodyGroup.add(panel);
+
+            const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.2), shellMat);
+            badge.position.set(-0.4, 0.05, 1.42);
+            bodyGroup.add(badge);
+
+            const dot = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), new THREE.MeshBasicMaterial({color: 0x52ff7a}));
+            dot.position.set(0.4, 0.05, 1.42);
+            bodyGroup.add(dot);
+
+            // Corrugated Accordion Bellows Neck Boot
+            const neckGroup = new THREE.Group();
+            neckGroup.position.y = 0.4;
+            for (let i = 0; i < 3; i++) {
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.08, 16, 32), darkMat);
+                ring.rotation.x = Math.PI / 2;
+                ring.position.y = i * 0.11;
+                neckGroup.add(ring);
+            }
+            bodyGroup.add(neckGroup);
+
+            // --- TWO RETRO MECHANICAL LIMBS (ARMS) - HIERARCHICAL FOR WAVING & GESTURES ---
+            function createArm(isLeft, metalShell, jointMat) {
+                const dir = isLeft ? -1 : 1;
+                const armRoot = new THREE.Group();
+                armRoot.position.set(dir * 1.35, 0.1, 0); // Grounded shoulder mount pivot
+
+                // Visible Shoulder Joint ball bracket
+                const shoulderBase = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), jointMat);
+                armRoot.add(shoulderBase);
+
+                // Dynamic Shoulder rotation hinge
+                const shoulderJoint = new THREE.Group();
+                armRoot.add(shoulderJoint);
+
+                // Upper arm cylindrical link (pivoted from the shoulder group origin)
+                const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.45, 16), metalShell);
+                upperArm.position.set(dir * 0.15, -0.1, 0);
+                upperArm.rotation.z = dir * 0.45;
+                shoulderJoint.add(upperArm);
+
+                // Elbow Joint Group (Pivot offset at the end of the upper arm segment)
+                const elbowJoint = new THREE.Group();
+                elbowJoint.position.set(dir * 0.3, -0.4, 0);
+                shoulderJoint.add(elbowJoint);
+
+                // Visible elbow bracket sphere
+                const elbowBase = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), jointMat);
+                elbowJoint.add(elbowBase);
+
+                // Forearm link
+                const lowerArm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.45, 16), metalShell);
+                lowerArm.position.set(dir * 0.1, -0.18, 0.1);
+                lowerArm.rotation.x = 0.5; // Angled forward
+                lowerArm.rotation.z = dir * 0.1;
+                elbowJoint.add(lowerArm);
+
+                // Wrist base and 3-Finger mechanical claw (Chunky hand assembly)
+                const handJoint = new THREE.Group();
+                handJoint.position.set(dir * 0.18, -0.38, 0.2);
+                elbowJoint.add(handJoint);
+                
+                // Heavy mechanical wrist base
+                const handBase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16), jointMat);
+                handBase.rotation.x = Math.PI / 2;
+                handJoint.add(handBase);
+
+                // Wrist accent bezel ring
+                const wristRing = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 16), metalShell);
+                wristRing.rotation.x = Math.PI / 2;
+                wristRing.position.z = -0.02;
+                handJoint.add(wristRing);
+
+                // Left side of hand gripper (Enlarged)
+                const clawFinger1 = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 12, 24, Math.PI), jointMat);
+                clawFinger1.position.set(-0.08, 0, 0.1);
+                clawFinger1.rotation.y = Math.PI / 2;
+                clawFinger1.rotation.z = 0.1;
+                handJoint.add(clawFinger1);
+
+                // Right side of hand gripper (Enlarged)
+                const clawFinger2 = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 12, 24, Math.PI), jointMat);
+                clawFinger2.position.set(0.08, 0, 0.1);
+                clawFinger2.rotation.y = -Math.PI / 2;
+                clawFinger2.rotation.z = -0.1;
+                handJoint.add(clawFinger2);
+
+                // Central high-tech laser stylus tip
+                const laserTip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.12, 8), metalShell);
+                laserTip.position.set(0, 0, 0.05);
+                laserTip.rotation.x = Math.PI / 2;
+                handJoint.add(laserTip);
+
+                const laserLens = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), new THREE.MeshBasicMaterial({color: 0x52ff7a}));
+                laserLens.position.set(0, 0, 0.11);
+                laserLens.rotation.x = Math.PI / 2;
+                handJoint.add(laserLens);
+
+                return {
+                    root: armRoot,
+                    shoulder: shoulderJoint,
+                    elbow: elbowJoint,
+                    hand: handJoint
+                };
+            }
+
+            leftArm = createArm(true, shellMat, darkMat);
+            rightArm = createArm(false, shellMat, darkMat);
+            
+            bodyGroup.add(leftArm.root, rightArm.root);
+            robotGroup.add(bodyGroup);
+
+            // 3. Monitor Head Group
+            headGroup = new THREE.Group();
+            headGroup.position.y = 0.8;
+
+            // Monitor Chassis Box
+            const headBoxGeo = new THREE.BoxGeometry(3.0, 2.0, 2.0);
+            const headBox = new THREE.Mesh(headBoxGeo, shellMat);
+            headGroup.add(headBox);
+
+            // Screen frame bezel (Satin Dark Charcoal)
+            const bezelGeo = new THREE.BoxGeometry(2.7, 1.7, 2.1);
+            const bezel = new THREE.Mesh(bezelGeo, darkMat);
+            bezel.position.z = 0.05;
+            headGroup.add(bezel);
+
+            // Detailed Industrial Bezel Screws (4 Corner Rivets)
+            const screwGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.02, 12);
+            screwGeo.rotateX(Math.PI / 2);
+            const screwPositions = [
+                [-1.25, 0.75, 1.06], [1.25, 0.75, 1.06],
+                [-1.25, -0.75, 1.06], [1.25, -0.75, 1.06]
+            ];
+            screwPositions.forEach(pos => {
+                const screw = new THREE.Mesh(screwGeo, darkMat);
+                screw.position.fromArray(pos);
+                headGroup.add(screw);
+            });
+
+            // Display Screen Plane
+            const screenGeo = new THREE.PlaneGeometry(2.5, 1.5);
+            const screen = new THREE.Mesh(screenGeo, screenMat);
+            screen.position.set(0, 0, 1.11);
+            headGroup.add(screen);
+
+            // Ear audio vents with horizontal slot lines
+            const earGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 32);
+            const leftEar = new THREE.Mesh(earGeo, shellMat);
+            leftEar.rotation.z = Math.PI / 2;
+            leftEar.position.set(-1.65, -0.2, 0.2);
+            
+            const leftEarInner = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.32, 32), darkMat);
+            leftEarInner.rotation.z = Math.PI / 2;
+            leftEarInner.position.set(-1.65, -0.2, 0.2);
+
+            const rightEar = leftEar.clone();
+            rightEar.position.set(1.65, -0.2, 0.2);
+            const rightEarInner = leftEarInner.clone();
+            rightEarInner.position.set(1.65, -0.2, 0.2);
+
+            headGroup.add(leftEar, leftEarInner, rightEar, rightEarInner);
+
+            // Dial antenna/power block on right ear
+            const handleGeo = new THREE.BoxGeometry(0.3, 0.6, 0.8);
+            const handle = new THREE.Mesh(handleGeo, shellMat);
+            handle.position.set(1.6, 0.5, 0);
+            headGroup.add(handle);
+
+            // Top-Mounted Retro Radio Wire Antenna (with active pulsing status indicator LED)
+            const antennaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.6, 16), shellMat);
+            antennaPole.position.set(1.0, 1.15, -0.1);
+            antennaPole.rotation.z = -0.18;
+            headGroup.add(antennaPole);
+
+            antennaLed = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({color: 0xff0033}));
+            antennaLed.position.set(1.11, 1.45, -0.1);
+            headGroup.add(antennaLed);
+
+            robotGroup.add(headGroup);
+            scene.add(robotGroup);
+        }
+
+        // --- HOLOGRAPHIC EMITTER BASE (GENIE ORIENTED) ---
+        function createHolographicProjector() {
+            projectorBase = new THREE.Group();
+            projectorBase.position.set(0, -2.1, 0); // Anchored statically at the bottom of the viewport
+
+            const shellMat = new THREE.MeshStandardMaterial({
+                color: 0x6b7280, // Titanium grey for the floor base
+                metalness: 0.9,
+                roughness: 0.3,
+                bumpMap: noiseTexture,
+                bumpScale: 0.003
+            });
+
+            const darkMat = new THREE.MeshStandardMaterial({
+                color: 0x111827,
+                metalness: 0.8,
+                roughness: 0.5
+            });
+
+            // Vivid, highly emissive neon green lens base
+            const lensMat = new THREE.MeshBasicMaterial({
+                color: 0x52ff7a,
+                transparent: true,
+                opacity: 0.95
+            });
+
+            // Outermost heavy structural disc
+            const outerDisc = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.2, 32), shellMat);
+            outerDisc.position.y = -0.1;
+            projectorBase.add(outerDisc);
+
+            // Inner beveled riser ring
+            const innerRiser = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.5, 0.15, 32), darkMat);
+            innerRiser.position.y = 0.075;
+            projectorBase.add(innerRiser);
+
+            // Glowing Projector Output Lens (Shrunk to a tight point)
+            const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.02, 32), lensMat);
+            lens.position.y = 0.16;
+            projectorBase.add(lens);
+
+            // Small bright focal core sphere representing the exact "Jin" emergence point
+            projectorLensCore = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x52ff7a })
+            );
+            projectorLensCore.position.set(0, 0.18, 0);
+            projectorBase.add(projectorLensCore);
+
+            // Bezel Details: Industrial screws around the projector emitter housing
+            const screwGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.02, 8);
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const screw = new THREE.Mesh(screwGeo, shellMat);
+                screw.position.set(Math.cos(angle) * 1.1, 0.16, Math.sin(angle) * 1.1);
+                projectorBase.add(screw);
+            }
+
+            // Volumetric Projector Genie Beam (Connects projector lens to robot bottom)
+            // Starts at radius 0.0 at the base (origin) and flares outwards (radius 0.7 at the top)
+            const beamGeo = new THREE.CylinderGeometry(0.7, 0.01, 1.0, 32, 1, true);
+            beamGeo.translate(0, 0.5, 0); // Offset pivot to bottom base for natural scaling
+            
+            // Increased opacity from 0.15 to 0.25 for a rich volumetric cone structure
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0x52ff7a,
+                transparent: true,
+                opacity: 0.25,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            projectionBeam = new THREE.Mesh(beamGeo, beamMat);
+            projectionBeam.position.set(0, 0.17, 0); // Anchored at the lens top face
+            projectorBase.add(projectionBeam);
+
+            // Concentrated Neon Green Genie Scanning Lasers emerging from the same pinpoint
+            const laserMat = new THREE.MeshBasicMaterial({
+                color: 0x39FF14, // Ultra-bright neon green
+                transparent: true,
+                opacity: 0.85, 
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            // Thickened cylinders (0.04 top, 0.01 bottom) to make them extremely visible
+            const laserGeo = new THREE.CylinderGeometry(0.04, 0.01, 1.0, 8, 1, true);
+            laserGeo.translate(0, 0.5, 0); // Translate pivot to base
+
+            for (let i = 0; i < 4; i++) {
+                const laser = new THREE.Mesh(laserGeo, laserMat);
+                laser.position.set(0, 0.17, 0);
+                projectorBase.add(laser);
+                laserLines.push(laser);
+            }
+
+            scene.add(projectorBase);
+        }
+
+        // --- RETRO ANIME OCCASIONAL HAND WAVE TRIGGER ---
+        function triggerWaveAnimation() {
+            if (state === 'speaking' || isWaving || activeGesture !== null) return;
+            isWaving = true;
+            activeGesture = 'wave';
+
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    isWaving = false;
+                    activeGesture = null;
+                    nextWaveTime = time + 14 + Math.random() * 8; // Schedule next wave in 14-22s
+                }
+            });
+
+            // Smoothly lift the entire right arm up into waving position
+            tl.to(rightArm.shoulder.rotation, { x: -1.2, z: -0.3, y: 0.4, duration: 0.8, ease: "power2.out" })
+              .to(rightArm.elbow.rotation, { x: 0.2, z: -1.0, duration: 0.8, ease: "power2.out" }, "<")
+              .to(rightArm.hand.rotation, { x: 0.5, duration: 0.8, ease: "power2.out" }, "<");
+
+            // Perform 3 natural wave cycles back and forth
+            const waveCycles = 3;
+            for (let i = 0; i < waveCycles; i++) {
+                tl.to(rightArm.elbow.rotation, { z: -0.4, duration: 0.22, ease: "sine.inOut" })
+                  .to(rightArm.elbow.rotation, { z: -1.0, duration: 0.22, ease: "sine.inOut" });
+            }
+
+            // Return arm smoothly to standard idle state
+            tl.to(rightArm.shoulder.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" })
+              .to(rightArm.elbow.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" }, "<")
+              .to(rightArm.hand.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" }, "<");
+        }
+
+        // --- RETRO DEEP THINKING ANIMATION ---
+        function triggerThinkingAnimation() {
+            if (state === 'speaking' || isWaving || activeGesture !== null) return;
+            activeGesture = 'thinking';
+            faceOverride = 'thinking';
+
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    activeGesture = null;
+                    faceOverride = null;
+                    nextThinkTime = time + 16 + Math.random() * 10; // Schedule next deep think in 16-26s
+                }
+            });
+
+            // Raise left arm to touch the head temple thoughtfully
+            tl.to(leftArm.shoulder.rotation, { x: -1.0, z: 0.8, y: -0.2, duration: 0.8, ease: "power2.out" })
+              .to(leftArm.elbow.rotation, { x: -0.2, z: 1.2, duration: 0.8, ease: "power2.out" }, "<")
+              .to(leftArm.hand.rotation, { x: 0.4, y: -0.3, z: 0, duration: 0.8, ease: "power2.out" }, "<")
+              .to(headGroup.rotation, { z: -0.15, y: -0.1, x: 0.15, duration: 0.8, ease: "power2.out" }, "<");
+
+            // Perform subtle arm/thought adjustments to represent deep wonder
+            tl.to(leftArm.elbow.rotation, { z: 1.25, duration: 0.5, yoyo: true, repeat: 3, ease: "sine.inOut" })
+              .to(headGroup.rotation, { x: 0.12, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut" }, "<")
+              .delay(1.0); // Stay in contemplation
+
+            // Return arm smoothly to standard idle state
+            tl.to(leftArm.shoulder.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" })
+              .to(leftArm.elbow.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" }, "<")
+              .to(leftArm.hand.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" }, "<")
+              .to(headGroup.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" }, "<");
+        }
+
+        // --- INTERACTIVE CORRECT THUMBS-UP GESTURE ---
+        function triggerThumbsUp() {
+            if (activeGesture !== null) return;
+            activeGesture = 'thumbsup';
+            faceOverride = 'correct';
+
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    activeGesture = null;
+                    faceOverride = null;
+                }
+            });
+
+            // Raise right arm forward, turn hand to point the central stylus core straight UP!
+            tl.to(rightArm.shoulder.rotation, { x: -1.4, y: -0.2, z: -0.2, duration: 0.6, ease: "power2.out" })
+              .to(rightArm.elbow.rotation, { x: -0.4, z: -0.8, duration: 0.6, ease: "power2.out" }, "<")
+              .to(rightArm.hand.rotation, { x: 1.5, y: -0.2, z: 0, duration: 0.6, ease: "power2.out" }, "<")
+              
+              // Small bouncing emphasis on the arm to celebrate
+              .to(rightArm.shoulder.position, { y: 0.25, duration: 0.15, yoyo: true, repeat: 1 })
+              .delay(1.8) // Hold the glorious thumbs-up
+              
+              // Smooth recovery back to idle layout
+              .to([rightArm.shoulder.rotation, rightArm.elbow.rotation, rightArm.hand.rotation], { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" });
+        }
+
+        // --- INTERACTIVE INCORRECT SARCASTIC SHRUG GESTURE ---
+        function triggerSarcasticShrug() {
+            if (activeGesture !== null) return;
+            activeGesture = 'shrug';
+            faceOverride = 'incorrect';
+
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    activeGesture = null;
+                    faceOverride = null;
+                }
+            });
+
+            // Perform dramatic facepalm-like neck tilt + shrugging arms
+            tl.to(leftArm.shoulder.rotation, { x: -0.2, y: -0.4, z: -0.65, duration: 0.6, ease: "power2.out" })
+              .to(leftArm.elbow.rotation, { x: 0.35, y: 0, z: 0.5, duration: 0.6, ease: "power2.out" }, "<")
+              .to(leftArm.hand.rotation, { x: 0.4, y: -0.5, z: -0.5, duration: 0.6, ease: "power2.out" }, "<")
+              
+              .to(rightArm.shoulder.rotation, { x: -0.2, y: 0.4, z: 0.65, duration: 0.6, ease: "power2.out" })
+              .to(rightArm.elbow.rotation, { x: 0.35, y: 0, z: -0.5, duration: 0.6, ease: "power2.out" }, "<")
+              .to(rightArm.hand.rotation, { x: 0.4, y: 0.5, z: 0.5, duration: 0.6, ease: "power2.out" }, "<")
+              
+              // Shake head in disbelief / sarcasm
+              .to(headGroup.rotation, { z: 0.15, x: 0.1, y: -0.12, duration: 0.5, ease: "power2.out" }, "<")
+              .to(headGroup.rotation, { y: 0.12, duration: 0.3, ease: "sine.inOut" })
+              .to(headGroup.rotation, { y: -0.12, duration: 0.3, ease: "sine.inOut" })
+              .to(headGroup.rotation, { y: 0, duration: 0.3, ease: "sine.inOut" })
+              
+              .delay(1.2) // Maintain shrug of disapproval
+              
+              // Smooth release
+              .to([leftArm.shoulder.rotation, leftArm.elbow.rotation, leftArm.hand.rotation,
+                   rightArm.shoulder.rotation, rightArm.elbow.rotation, rightArm.hand.rotation,
+                   headGroup.rotation], { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.inOut" });
+        }
+
+        // --- ANIMATION CONTROLLER LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            time = clock.getElapsedTime();
+
+            // Organic hovering lift (Slowed down slightly for heavy robotic physics)
+            robotGroup.position.y = 0.5 + Math.sin(time * 1.8) * 0.08;
+            
+            // Apply micro look-at head movement only if not shrugging or thinking
+            if (activeGesture !== 'shrug' && activeGesture !== 'thinking') {
+                headGroup.rotation.x = Math.sin(time * 1.3) * 0.04;
+                headGroup.rotation.y = Math.cos(time * 1.1) * 0.025;
+            }
+            
+            // --- GESTURE CONTROLLER INTERPOLATION ENGINE ---
+            // Create organic, smooth target values that blend into one another
+            let lShoulderTargetX = 0, lShoulderTargetY = 0, lShoulderTargetZ = 0;
+            let lElbowTargetX = 0, lElbowTargetY = 0, lElbowTargetZ = 0;
+            let rShoulderTargetX = 0, rShoulderTargetY = 0, rShoulderTargetZ = 0;
+            let rElbowTargetX = 0, rElbowTargetY = 0, rElbowTargetZ = 0;
+
+            if (state === 'speaking') {
+                const speakAmp = audioAmplitude;
+                
+                // Cycle conversational orator postures procedurally
+                if (time > nextGestureTime) {
+                    speakGestureType = Math.floor(Math.random() * 4);
+                    nextGestureTime = time + 1.8 + Math.random() * 2.0; // Alternate gestures every ~2-3.8s
+                }
+
+                switch(speakGestureType) {
+                    case 0: // Explaining - outward circular expansion
+                        if (activeGesture === null) {
+                            lShoulderTargetX = -0.3 + Math.sin(time * 3.5) * 0.15 * speakAmp;
+                            lShoulderTargetY = -0.25 + Math.cos(time * 3.5) * 0.12 * speakAmp;
+                            lShoulderTargetZ = -0.2 - Math.sin(time * 2.5) * 0.1 * speakAmp;
+                            lElbowTargetX = -0.4 + Math.cos(time * 3.5) * 0.2 * speakAmp;
+
+                            rShoulderTargetX = -0.3 + Math.cos(time * 3.5) * 0.15 * speakAmp;
+                            rShoulderTargetY = 0.25 - Math.sin(time * 3.5) * 0.12 * speakAmp;
+                            rShoulderTargetZ = 0.2 + Math.sin(time * 2.5) * 0.1 * speakAmp;
+                            rElbowTargetX = -0.4 + Math.sin(time * 3.5) * 0.2 * speakAmp;
+                        }
+                        break;
+                    case 1: // Enunciating/Chop - Right hand makes staccato vertical cuts, left holds supportive
+                        if (activeGesture === null) {
+                            lShoulderTargetX = -0.15 + Math.sin(time * 1.5) * 0.05;
+                            lShoulderTargetZ = -0.3 + Math.cos(time * 1.5) * 0.05;
+                            lElbowTargetX = -0.3;
+
+                            rShoulderTargetX = -0.5 - speakAmp * 0.7; // Chop down with syllable peaks
+                            rShoulderTargetY = 0.15;
+                            rShoulderTargetZ = 0.2 + Math.sin(time * 2.0) * 0.05;
+                            rElbowTargetX = -0.2 - speakAmp * 0.55; 
+                        }
+                        break;
+                    case 2: // Expansive scale concept - both arms open wide and push out
+                        if (activeGesture === null) {
+                            lShoulderTargetX = -0.15;
+                            lShoulderTargetY = -0.35 * speakAmp;
+                            lShoulderTargetZ = -0.55 * speakAmp; // Flare wide
+                            lElbowTargetX = -0.45 + Math.sin(time * 3.0) * 0.08 * speakAmp;
+
+                            rShoulderTargetX = -0.15;
+                            rShoulderTargetY = 0.35 * speakAmp;
+                            rShoulderTargetZ = 0.55 * speakAmp; // Flare wide
+                            rElbowTargetX = -0.45 + Math.cos(time * 3.0) * 0.08 * speakAmp;
+                        }
+                        break;
+                    case 3: // Analytical List item tracking - left hand works staccato steps
+                        if (activeGesture === null) {
+                            lShoulderTargetX = -0.55 - Math.sin(time * 4.5) * 0.15 * speakAmp;
+                            lShoulderTargetY = -0.15;
+                            lShoulderTargetZ = -0.22;
+                            lElbowTargetX = -0.5 + Math.cos(time * 4.5) * 0.25 * speakAmp;
+
+                            rShoulderTargetZ = 0.2;
+                            rElbowTargetX = -0.2;
+                        }
+                        break;
+                }
+            } else {
+                // Standby Idle organic sway
+                if (activeGesture === null) {
+                    lShoulderTargetZ = Math.sin(time * 1.8) * 0.05;
+                    lElbowTargetX = Math.cos(time * 2.0) * 0.03;
+                    
+                    rShoulderTargetZ = -Math.sin(time * 1.8) * 0.05;
+                    rElbowTargetX = Math.sin(time * 2.0) * 0.03;
+                }
+            }
+
+            // Interpolate toward targets smoothly ONLY if they aren't controlled by GSAP overrides
+            if (activeGesture === null) {
+                leftArm.shoulder.rotation.x = THREE.MathUtils.lerp(leftArm.shoulder.rotation.x, lShoulderTargetX, 0.1);
+                leftArm.shoulder.rotation.y = THREE.MathUtils.lerp(leftArm.shoulder.rotation.y, lShoulderTargetY, 0.1);
+                leftArm.shoulder.rotation.z = THREE.MathUtils.lerp(leftArm.shoulder.rotation.z, lShoulderTargetZ, 0.1);
+                
+                leftArm.elbow.rotation.x = THREE.MathUtils.lerp(leftArm.elbow.rotation.x, lElbowTargetX, 0.1);
+                leftArm.elbow.rotation.y = THREE.MathUtils.lerp(leftArm.elbow.rotation.y, lElbowTargetY, 0.1);
+                leftArm.elbow.rotation.z = THREE.MathUtils.lerp(leftArm.elbow.rotation.z, lElbowTargetZ, 0.1);
+
+                rightArm.shoulder.rotation.x = THREE.MathUtils.lerp(rightArm.shoulder.rotation.x, rShoulderTargetX, 0.1);
+                rightArm.shoulder.rotation.y = THREE.MathUtils.lerp(rightArm.shoulder.rotation.y, rShoulderTargetY, 0.1);
+                rightArm.shoulder.rotation.z = THREE.MathUtils.lerp(rightArm.shoulder.rotation.z, rShoulderTargetZ, 0.1);
+
+                rightArm.elbow.rotation.x = THREE.MathUtils.lerp(rightArm.elbow.rotation.x, rElbowTargetX, 0.1);
+                rightArm.elbow.rotation.y = THREE.MathUtils.lerp(rightArm.elbow.rotation.y, rElbowTargetY, 0.1);
+                rightArm.elbow.rotation.z = THREE.MathUtils.lerp(rightArm.elbow.rotation.z, rElbowTargetZ, 0.1);
+            }
+
+            // Occasional Hand Wave trigger during normal idle cycles
+            if (time > nextWaveTime && state === 'idle' && activeGesture === null) {
+                triggerWaveAnimation();
+            }
+
+            // Occasional Deep Think thought cycle trigger
+            if (time > nextThinkTime && state === 'idle' && activeGesture === null) {
+                triggerThinkingAnimation();
+            }
+
+            // Glowing base ring revolutions
+            holoRingOuter.rotation.z = time * 0.5;
+            holoRingInner.rotation.z = -time * 0.8;
+            holoRingOuter.scale.setScalar(1 + Math.sin(time * 4) * 0.02);
+
+            // Dynamic Volumetric Projection Beam height & stretch tracking
+            const projectorTopY = -1.93; // Fixed projector base emission point
+            const robotBottomY = robotGroup.position.y - 1.2; // Connects just under the robot bottom plate
+            const dynamicBeamHeight = robotBottomY - projectorTopY;
+
+            // Fluid, Genie-Smoke organic swaying (Rotation around base pivot creates sweeping movement)
+            const swayX = Math.sin(time * 2.5) * 0.07;
+            const swayZ = Math.cos(time * 2.0) * 0.05;
+
+            if (projectionBeam) {
+                projectionBeam.scale.y = dynamicBeamHeight;
+                projectionBeam.rotation.x = swayX;
+                projectionBeam.rotation.z = swayZ;
+                
+                // Volumetric flicker simulation
+                const flicker = Math.sin(time * 35.0) * 0.03 + (Math.random() * 0.01);
+                projectionBeam.material.opacity = 0.22 + flicker;
+            }
+
+            // Synchronize laser lines with the genie sway and rotate them independently
+            laserLines.forEach((laser, idx) => {
+                laser.scale.y = dynamicBeamHeight;
+                
+                // Base coordinate sway matches the main projection cone
+                laser.rotation.x = swayX;
+                laser.rotation.z = swayZ;
+                
+                // Independent scanning spirals fanning outwards from the tip
+                const spiralAngle = (idx / laserLines.length) * Math.PI * 2 + (time * 1.8);
+                const spreadScale = 0.45 + Math.sin(time * 2.2 + idx) * 0.12;
+                
+                // Add secondary rotational sweeps on top of the base sway
+                laser.rotation.x += Math.sin(spiralAngle) * spreadScale;
+                laser.rotation.z += Math.cos(spiralAngle) * spreadScale;
+                
+                // Plasma pulse flickering
+                laser.material.opacity = 0.75 + (Math.sin(time * 50.0 + idx) * 0.1);
+            });
+
+            // Pulse projector lens core as the genie surges energy
+            if (projectorLensCore) {
+                projectorLensCore.scale.setScalar(1.0 + (Math.sin(time * 12.0) * 0.15));
+            }
+
+            // Pulse the top antenna status light
+            const pulseRate = Math.sin(time * 4.0) * 0.5 + 0.5;
+            if (state === 'speaking') {
+                antennaLed.material.color.setRGB(0.1, 0.8 + pulseRate * 0.2, 0.2); // Glowing Green when active
+            } else {
+                antennaLed.material.color.setRGB(0.8 + pulseRate * 0.2, 0.1, 0.1); // Glowing Red on Standby
+            }
+
+            // Fluid amplitude interpolation for natural lip sync shapes
+            audioAmplitude += (targetAmplitude - audioAmplitude) * 0.25;
+
+            // Randomized blinking mechanics (Only blinks if face override isn't active)
+            if (Math.random() < 0.015 && faceState.blink === 1 && faceOverride === null) {
+                gsap.to(faceState, { blink: 0.1, duration: 0.1, yoyo: true, repeat: 1 });
+            }
+
+            // Facial expression morphing states
+            if (faceOverride === null) {
+                if (state === 'speaking') {
+                    faceState.happy = audioAmplitude;
+                    updateFace(audioAmplitude);
+                } else {
+                    faceState.happy = 0;
+                    updateFace(0);
+                }
+            } else {
+                // If override is on, run face loop with constant amplitude or static override logic
+                updateFace(audioAmplitude);
+            }
+
+            // High-fidelity subtle mouse follow parallax
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, mouseX * 2, 0.05);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, 1.4 - mouseY * 2, 0.05);
+            camera.lookAt(0, 0.8, 0);
+
+            renderer.render(scene, camera);
+        }
+
+        // --- CURSOR TRACKING PARALLAX ---
+        let mouseX = 0;
+        let mouseY = 0;
+        function setupMouseTracking() {
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+            });
+        }
+
+        // --- PARENT INTEGRATION API ---
+        // Your parent application can directly invoke these methods to control the robot's speech and gestures:
+        window.avatar = {
+            /**
+             * Set the robot speaking state
+             * @param {boolean} isSpeaking
+             */
+            setSpeaking: function(isSpeaking) {
+                state = isSpeaking ? 'speaking' : 'idle';
+                if (isSpeaking) {
+                    // Cancel any running gesture so speaking arm-sync takes over immediately
+                    activeGesture = null;
+                    faceOverride = null;
+                } else {
+                    targetAmplitude = 0;
+                }
+            },
+            /**
+             * Feed real-time voice amplitude values to drive lip-sync and mechanical arm gestures
+             * @param {number} volume - Normalized float value between 0.0 and 1.0
+             */
+            setVolume: function(volume) {
+                if (state === 'speaking') {
+                    targetAmplitude = THREE.MathUtils.clamp(volume, 0, 1);
+                }
+            },
+            /**
+             * Trigger correct thumbs up and smiling face expression
+             */
+            triggerPass: function() {
+                triggerThumbsUp();
+            },
+            /**
+             * Trigger incorrect sarcastic shrug and disappointed face expression
+             */
+            triggerFail: function() {
+                triggerSarcasticShrug();
+            },
+            /**
+             * Trigger deep thinking pose and wondering facial layout
+             */
+            triggerThinking: function() {
+                triggerThinkingAnimation();
+            }
+        };
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+
+        // ── BLISS postMessage bridge ──
+        var _msgQueue = [];
+        var _flushInterval = null;
+
+        function _flushQueue() {
+            if (!window.avatar) return;
+            clearInterval(_flushInterval);
+            _flushInterval = null;
+            _msgQueue.forEach(function(d) { _handleMsg(d); });
+            _msgQueue = [];
+        }
+
+        function _handleMsg(d) {
+            if (!d || typeof d !== 'object') return;
+            if (d.type === 'bliss:speaking')    window.avatar.setSpeaking(d.value);
+            if (d.type === 'bliss:volume')       window.avatar.setVolume(d.value);
+            if (d.type === 'bliss:quiz-correct') window.avatar.triggerPass();
+            if (d.type === 'bliss:quiz-wrong')   window.avatar.triggerFail();
+            if (d.type === 'bliss:thinking')     window.avatar.triggerThinking();
+        }
+
+        window.addEventListener('message', function(e) {
+            var d = e.data;
+            if (!d || typeof d !== 'object') return;
+            if (window.avatar) { _handleMsg(d); }
+            else {
+                _msgQueue.push(d);
+                if (!_flushInterval) _flushInterval = setInterval(_flushQueue, 80);
+            }
+        });
+
+        function _notifyReady() {
+            if (window.self !== window.top)
+                window.parent.postMessage({ type: 'bliss:ready' }, '*');
+        }
+
+        // Hide test panel inside iframe
+        if (window.self !== window.top) {
+            var _hide = function() {
+                document.querySelectorAll('.test-panel,[id*="diag"],[class*="panel"]')
+                    .forEach(function(el) { el.style.display='none'; });
+            };
+            document.addEventListener('DOMContentLoaded', _hide);
+            setTimeout(_hide, 400);
+        }
+
+        window.onload = function() { init(); setTimeout(_notifyReady, 200); };
+    </script>
+</body>
+</html>

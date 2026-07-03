@@ -1,0 +1,27 @@
+Module: Introduction to Machine Learning
+
+1. What is Machine Learning?
+Machine learning (ML) is a branch of AI where systems learn patterns from data instead of being explicitly programmed with rules. A model is trained on examples and improves its predictions as it sees more data.
+
+2. Supervised Learning
+Supervised learning uses labeled data — each training example has an input and a known correct output. The model learns a mapping from inputs to outputs. Common tasks: classification (predicting a category, e.g. spam vs not-spam) and regression (predicting a number, e.g. house price).
+
+3. Unsupervised Learning
+Unsupervised learning works with unlabeled data. The model finds structure on its own, such as grouping similar items together (clustering) or reducing the number of variables while keeping the important information (dimensionality reduction).
+
+4. Overfitting
+Overfitting happens when a model learns the training data too closely, including its noise and random quirks, instead of the general pattern. An overfit model performs very well on training data but poorly on new, unseen data. It is bad because the goal of ML is generalization, not memorization. Common fixes: more training data, simpler models, regularization, and cross-validation.
+
+5. Underfitting
+Underfitting happens when a model is too simple to capture the underlying pattern in the data, so it performs poorly even on the training data.
+
+6. Train/Test Split
+Data is usually split into a training set (to fit the model) and a test set (to evaluate it on unseen examples), so performance estimates are realistic.
+
+7. Real-World Examples
+- Email spam filters (classification)
+- Predicting house prices from size/location (regression)
+- Customer segmentation for marketing (clustering)
+- Recommendation systems like Netflix or Spotify suggestions
+
+Replace this file's contents with your own course material — BLISS will ground its tutoring and quizzes in whatever text is here.

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+.env.example
+# Logs
+*.log
+npm-debug.log*
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

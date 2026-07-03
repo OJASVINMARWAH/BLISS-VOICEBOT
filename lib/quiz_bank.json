@@ -1,0 +1,162 @@
+[
+  {
+    "question_id": "1",
+    "module": "Introduction to AI",
+    "submodule": "Introduction to Sabka AI",
+    "concepts": [
+      "Artificial Intelligence",
+      "Machine Learning"
+    ],
+    "learning_objective": "Define Artificial Intelligence",
+    "difficulty": "Easy",
+    "question": "What is Artificial Intelligence?",
+    "options": [
+      "Artificial Intelligence is a branch of computer science that aims to build computer systems that can perform tasks that normally require human brainpower",
+      "Artificial Intelligence is a type of computer hardware",
+      "Artificial Intelligence is a type of computer software",
+      "Artificial Intelligence is a type of computer network"
+    ],
+    "answer": "Artificial Intelligence is a branch of computer science that aims to build computer systems that can perform tasks that normally require human brainpower",
+    "explanation": "AI is a branch of computer science"
+  },
+  {
+    "question_id": "2",
+    "module": "AI Fundamentals",
+    "submodule": "The Data Pipeline",
+    "concepts": [
+      "Data Pipeline",
+      "Machine Learning"
+    ],
+    "learning_objective": "Explain the Data Pipeline",
+    "difficulty": "Easy",
+    "question": "What are the three stages of the Data Pipeline?",
+    "options": [
+      "Collection, Cleaning, and Analysis",
+      "Collection, Processing, and Storage",
+      "Collection, Transmission, and Reception",
+      "Collection, Cleaning, and Transmission"
+    ],
+    "answer": "Collection, Cleaning, and Analysis",
+    "explanation": "Data Pipeline has 3 stages"
+  },
+  {
+    "question_id": "3",
+    "module": "Introduction to AI",
+    "submodule": "How AI Works",
+    "concepts": [
+      "Machine Learning",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain how AI works",
+    "difficulty": "Easy",
+    "question": "How does AI work?",
+    "options": [
+      "AI works by learning from examples, rather than being programmed with strict rules",
+      "AI works by being programmed with strict rules",
+      "AI works by using computer vision",
+      "AI works by using natural language processing"
+    ],
+    "answer": "AI works by learning from examples, rather than being programmed with strict rules",
+    "explanation": "AI learns from examples"
+  },
+  {
+    "question_id": "4",
+    "module": "AI Fundamentals",
+    "submodule": "The Key Idea: The Car Analogy",
+    "concepts": [
+      "Car Analogy",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain the Car Analogy",
+    "difficulty": "Easy",
+    "question": "What are the three essential things required for AI?",
+    "options": [
+      "Data, Algorithms, and Compute power",
+      "Data, Software, and Hardware",
+      "Data, Network, and Storage",
+      "Data, Transmission, and Reception"
+    ],
+    "answer": "Data, Algorithms, and Compute power",
+    "explanation": "AI needs Data, Algorithms, and Compute power"
+  },
+  {
+    "question_id": "5",
+    "module": "Applications of AI",
+    "submodule": "FinTech",
+    "concepts": [
+      "FinTech",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain the role of AI in FinTech",
+    "difficulty": "Medium",
+    "question": "How does AI contribute to the security of digital payments in FinTech?",
+    "options": [
+      "AI models instantly check transactions for fraud, looking at location, time of day, device used, and past spending history",
+      "AI models only check transactions for fraud based on location",
+      "AI models only check transactions for fraud based on time of day",
+      "AI models do not contribute to the security of digital payments"
+    ],
+    "answer": "AI models instantly check transactions for fraud, looking at location, time of day, device used, and past spending history",
+    "explanation": "AI checks transactions for fraud"
+  },
+  {
+    "question_id": "6",
+    "module": "Applications of AI",
+    "submodule": "Smart Cities",
+    "concepts": [
+      "Smart Cities",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain the role of AI in Smart Cities",
+    "difficulty": "Medium",
+    "question": "How does AI help in managing traffic in Smart Cities?",
+    "options": [
+      "AI adjusts traffic signals dynamically to clear bottlenecks and reduce traffic jams",
+      "AI only monitors air pollution",
+      "AI only provides real-time data to authorities",
+      "AI does not contribute to traffic management"
+    ],
+    "answer": "AI adjusts traffic signals dynamically to clear bottlenecks and reduce traffic jams",
+    "explanation": "AI manages traffic"
+  },
+  {
+    "question_id": "7",
+    "module": "Applications of AI",
+    "submodule": "Autonomous Vehicles",
+    "concepts": [
+      "Autonomous Vehicles",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain the role of AI in Autonomous Vehicles",
+    "difficulty": "Medium",
+    "question": "How does AI contribute to the safety of Autonomous Vehicles?",
+    "options": [
+      "AI sensors can 'see' the road and apply emergency brakes faster than a human driver",
+      "AI sensors can only 'see' the road but cannot apply emergency brakes",
+      "AI sensors can only apply emergency brakes but cannot 'see' the road",
+      "AI does not contribute to the safety of Autonomous Vehicles"
+    ],
+    "answer": "AI sensors can 'see' the road and apply emergency brakes faster than a human driver",
+    "explanation": "AI improves safety"
+  },
+  {
+    "question_id": "8",
+    "module": "Applications of AI",
+    "submodule": "Agriculture",
+    "concepts": [
+      "Agriculture",
+      "Artificial Intelligence"
+    ],
+    "learning_objective": "Explain the role of AI in Agriculture",
+    "difficulty": "Medium",
+    "question": "How does AI help farmers in Agriculture?",
+    "options": [
+      "AI models can look at satellite photos and tell farmers which patch of land needs more water or fertilizer",
+      "AI models can only look at satellite photos but cannot provide advice",
+      "AI models can only provide advice but cannot look at satellite photos",
+      "AI does not contribute to Agriculture"
+    ],
+    "answer": "AI models can look at satellite photos and tell farmers which patch of land needs more water or fertilizer",
+    "explanation": "AI helps farmers"
+  }
+]
